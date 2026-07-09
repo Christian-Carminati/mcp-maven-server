@@ -5,8 +5,8 @@ An MCP (Model Context Protocol) server that wraps Maven and Spring Boot operatio
 ## Prerequisites
 
 - **Node.js** 18+ (with npm)
-- **Maven** 3.6+ (in PATH as `mvn`)
-- **Java** 8–21 (detected automatically)
+- **Maven** 3.6+ (in PATH or configured via `MCP_MAVEN_COMMAND`)
+- **Java** 8–21+ (detected automatically)
 
 ## Installation
 
@@ -25,26 +25,31 @@ npm run build
 
 ### 1. MCP Server Configuration
 
-Add to `~\.claude\settings.local.json`:
+Add to `~\.claude.json`:
 
 ```json
 {
   "mcpServers": {
     "mcp-maven": {
+      "type": "stdio",
       "command": "node",
       "args": ["C:\\Java\\mcp-maven-server\\dist\\index.js"],
       "env": {
         "MCP_MAVEN_TIMEOUT_MS": "300000",
-        "MCP_MAVEN_MAX_LOG_LINES": "500"
+        "MCP_MAVEN_MAX_LOG_LINES": "500",
+        "MCP_MAVEN_COMMAND": "C:\\Program Files\\JetBrains\\IntelliJ IDEA 2025.3.6\\plugins\\maven\\lib\\maven3\\bin\\mvn.cmd"
       }
     }
   }
 }
 ```
 
+> `MCP_MAVEN_COMMAND` is optional — set it if `mvn` is not in your system PATH.
+> Omitting it makes the server look for `mvn` via PATH.
+
 ### 2. Block Maven via Bash (Permissions)
 
-Prevents Claude from running `mvn`, `./mvnw`, or `java -jar` via raw Bash:
+Add to `~\.claude\settings.json`:
 
 ```json
 {
@@ -56,7 +61,7 @@ Prevents Claude from running `mvn`, `./mvnw`, or `java -jar` via raw Bash:
 
 ### 3. PreToolUse Hook (Bash Interception)
 
-When Claude does try `mvn` via Bash, the hook intercepts it and redirects to the MCP tools:
+Add to `~\.claude\settings.json`:
 
 ```json
 {
@@ -104,43 +109,47 @@ Do not attempt to run mvn via Bash — it will be denied.
 ## Available Tools
 
 ### Build
-| Tool | Description |
-|------|-------------|
-| `compileProject` | Compile with structured error output (file, line, column, message) |
-| `verifyProject` | Compile + test + integration-check |
-| `packageProject` | Build JAR/WAR artifact (skips tests by default) |
-| `cleanProject` | Clean build artifacts |
-| `executeMavenCommand` | Run arbitrary Maven with parsed error output |
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `compileProject` | Compile with structured error output (file, line, column, message) | `projectPath`, `module`, `profile` |
+| `verifyProject` | Compile + test + integration-check | `projectPath`, `module`, `profile` |
+| `packageProject` | Build JAR/WAR artifact (skips tests by default) | `projectPath`, `module`, `skipTests` |
+| `cleanProject` | Clean build artifacts | `projectPath`, `module` |
+| `executeMavenCommand` | Run arbitrary Maven with parsed error output | `projectPath`, `args[]` |
 
 ### Test
-| Tool | Description |
-|------|-------------|
-| `runTests` | Execute all tests |
-| `runSingleTest` | Run one test class |
-| `runSingleMethod` | Run one test method |
-| `getFailedTests` | Read failed tests without re-running |
-| `getTestReports` | Read existing reports from disk |
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `runTests` | Execute all tests | `projectPath`, `module`, `profile` |
+| `runSingleTest` | Run one test class | `projectPath`, `className` |
+| `runSingleMethod` | Run one test method | `projectPath`, `className`, `methodName` |
+| `getFailedTests` | Read failed tests without re-running | `projectPath`, `module` |
+| `getTestReports` | Read existing reports from disk | `projectPath`, `module` |
 
 ### Spring Boot
-| Tool | Description |
-|------|-------------|
-| `springBootRun` | Start the application (detects port, captures logs) |
-| `springBootStop` | Stop gracefully (actuator shutdown first, SIGTERM fallback) |
-| `springBootRestart` | Restart the app |
-| `springBootStatus` | Check status, port, PID, health endpoint |
-| `springBootLogs` | View recent log lines |
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `springBootRun` | Start the application (detects port, captures logs) | `projectPath`, `profile`, `waitForStartup` |
+| `springBootStop` | Stop gracefully (actuator shutdown first, SIGTERM fallback) | `projectPath`, `module` |
+| `springBootRestart` | Restart the app | `projectPath`, `profile` |
+| `springBootStatus` | Check status, port, PID, health endpoint | `projectPath`, `module` |
+| `springBootLogs` | View recent log lines | `projectPath`, `lines` |
 
 ### Project Info
-| Tool | Description |
-|------|-------------|
-| `getProjectInfo` | Detect project structure, modules, Java version |
-| `getJavaInfo` | Detect JDK version and vendor |
-| `getMavenInfo` | Get Maven version and home |
-| `ping` | Health check |
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `getProjectInfo` | Detect project structure, modules, Java version | `projectPath` |
+| `getJavaInfo` | Detect JDK version and vendor | `projectPath` |
+| `getMavenInfo` | Get Maven version and home | — |
+| `ping` | Health check | — |
+
+> **`projectPath`**: all build/test/project tools accept an optional `projectPath` parameter.
+> Use it to target a specific module without changing Claude Code's working directory.
+> Example: `runTests({ projectPath: "C:/Java/BancomatPay/be-bancomatpay" })`
 
 ## Configuration
 
-All settings are optional and configure via environment variables:
+All settings are optional and configured via environment variables (set in the MCP server `env` block):
 
 | Variable | Default | Description |
 |---|---|---|
@@ -151,6 +160,7 @@ All settings are optional and configure via environment variables:
 | `MCP_MAVEN_CACHE_ENABLED` | true | Enable/disable build caching |
 | `MCP_MAVEN_DEFAULT_PROFILE` | — | Default Maven profile |
 | `MCP_JAVA_HOME` | — | Override JDK path |
+| **`MCP_MAVEN_COMMAND`** | `mvn` | **Full path to `mvn.cmd`/`mvn` binary** (e.g. IntelliJ-bundled Maven) |
 
 ## Project Structure
 
