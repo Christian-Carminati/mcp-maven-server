@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.example.UserServiceTest" tests="3" failures="0" errors="0" skipped="0" time="1.234">
+  <testcase name="shouldCreateUser" classname="com.example.UserServiceTest" time="0.456"/>
+  <testcase name="shouldDeleteUser" classname="com.example.UserServiceTest" time="0.345"/>
+  <testcase name="shouldUpdateUser" classname="com.example.UserServiceTest" time="0.433"/>
+</testsuite>

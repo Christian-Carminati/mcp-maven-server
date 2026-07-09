@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.example.UserControllerTest" tests="4" failures="1" errors="1" skipped="1" time="2.567">
+  <testcase name="shouldReturnOk" classname="com.example.UserControllerTest" time="0.123"/>
+  <testcase name="shouldReturnNotFound" classname="com.example.UserControllerTest" time="0.234">
+    <failure message="expected:<404> but was:<200>" type="java.lang.AssertionError">
+      java.lang.AssertionError: expected:<404> but was:<200>
+        at com.example.UserControllerTest.shouldReturnNotFound(UserControllerTest.java:42)
+    </failure>
+  </testcase>
+  <testcase name="shouldHandleError" classname="com.example.UserControllerTest" time="0.345">
+    <error message="NullPointerException" type="java.lang.NullPointerException">
+      java.lang.NullPointerException: Cannot invoke "String.length()" because "str" is null
+        at com.example.UserControllerTest.shouldHandleError(UserControllerTest.java:50)
+    </error>
+  </testcase>
+  <testcase name="shouldSkip" classname="com.example.UserControllerTest" time="0">
+    <skipped message="not implemented yet"/>
+  </testcase>
+</testsuite>
