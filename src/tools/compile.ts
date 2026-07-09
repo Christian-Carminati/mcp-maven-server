@@ -4,6 +4,8 @@ import { type ToolContext } from '../core/types.js';
 import { runMaven, buildGoalArgs } from '../maven/runner.js';
 import { parseCompilationOutput } from '../maven/parser.js';
 
+const projectPathOption = z.string().optional().describe('Path to the Maven project/module directory (defaults to current working directory)');
+
 export function registerCompileTools(server: McpServer, context: ToolContext): void {
   server.tool(
     'compileProject',
@@ -11,13 +13,14 @@ export function registerCompileTools(server: McpServer, context: ToolContext): v
     {
       module: z.string().optional().describe('Maven module name (for multi-module projects)'),
       profile: z.string().optional().describe('Maven profile to activate'),
+      projectPath: projectPathOption,
     },
-    async ({ module, profile }) => {
+    async ({ module, profile, projectPath }) => {
       const args = buildGoalArgs(['compile'], {
         module,
         profile: profile ? [profile] : undefined,
       });
-      const result = await runMaven(context.config, { args });
+      const result = await runMaven(context.config, { args, cwd: projectPath });
 
       if (result.exitCode === 0) {
         return {
@@ -52,10 +55,11 @@ export function registerCompileTools(server: McpServer, context: ToolContext): v
     {
       module: z.string().optional(),
       profile: z.string().optional(),
+      projectPath: projectPathOption,
     },
-    async ({ module, profile }) => {
+    async ({ module, profile, projectPath }) => {
       const args = buildGoalArgs(['compile'], { module, profile: profile ? [profile] : undefined });
-      const result = await runMaven(context.config, { args });
+      const result = await runMaven(context.config, { args, cwd: projectPath });
       const parsed = parseCompilationOutput(result.stdout + result.stderr);
 
       return {

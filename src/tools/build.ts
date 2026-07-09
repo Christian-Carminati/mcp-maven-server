@@ -7,6 +7,12 @@ import { readAllReports, aggregateResults } from '../maven/reports.js';
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
+const projectPathOption = z.string().optional().describe('Path to the Maven project/module directory (defaults to current working directory)');
+
+function resolveBaseDir(projectPath?: string): string {
+  return projectPath || process.cwd();
+}
+
 export function registerBuildTools(server: McpServer, context: ToolContext): void {
   server.tool(
     'verifyProject',
@@ -14,15 +20,16 @@ export function registerBuildTools(server: McpServer, context: ToolContext): voi
     {
       module: z.string().optional(),
       profile: z.string().optional(),
+      projectPath: projectPathOption,
     },
-    async ({ module, profile }) => {
+    async ({ module, profile, projectPath }) => {
+      const cwd = resolveBaseDir(projectPath);
       const args = buildGoalArgs(['verify'], { module, profile: profile ? [profile] : undefined });
-      const result = await runMaven(context.config, { args });
+      const result = await runMaven(context.config, { args, cwd });
       const parsed = parseCompilationOutput(result.stdout + result.stderr);
 
-      const targetDir = context.projectInfo ? join(context.projectInfo.moduleDir, 'target') : 'target';
-      const surefireDir = join(targetDir, 'surefire-reports');
-      const failsafeDir = join(targetDir, 'failsafe-reports');
+      const surefireDir = join(cwd, 'target', 'surefire-reports');
+      const failsafeDir = join(cwd, 'target', 'failsafe-reports');
 
       const testResults = aggregateResults([
         ...readAllReports(surefireDir).map(r => join(surefireDir, `TEST-${r.className}.xml`)),
@@ -42,13 +49,15 @@ export function registerBuildTools(server: McpServer, context: ToolContext): voi
       module: z.string().optional(),
       profile: z.string().optional(),
       skipTests: z.boolean().optional().default(true),
+      projectPath: projectPathOption,
     },
-    async ({ module, profile, skipTests }) => {
+    async ({ module, profile, skipTests, projectPath }) => {
+      const cwd = resolveBaseDir(projectPath);
       const args = buildGoalArgs(['package'], { module, profile: profile ? [profile] : undefined, skipTests });
-      const result = await runMaven(context.config, { args });
+      const result = await runMaven(context.config, { args, cwd });
 
       let artifactPath = '';
-      const targetDir = context.projectInfo ? join(context.projectInfo.moduleDir, 'target') : 'target';
+      const targetDir = join(cwd, 'target');
       if (existsSync(targetDir)) {
         try {
           const files = readdirSync(targetDir);
@@ -73,10 +82,12 @@ export function registerBuildTools(server: McpServer, context: ToolContext): voi
     'Clean the project (mvn clean)',
     {
       module: z.string().optional(),
+      projectPath: projectPathOption,
     },
-    async ({ module }) => {
+    async ({ module, projectPath }) => {
+      const cwd = resolveBaseDir(projectPath);
       const args = buildGoalArgs(['clean'], { module });
-      const result = await runMaven(context.config, { args });
+      const result = await runMaven(context.config, { args, cwd });
       return {
         content: [{ type: 'text', text: JSON.stringify({
           success: result.exitCode === 0,
@@ -93,10 +104,12 @@ export function registerBuildTools(server: McpServer, context: ToolContext): voi
     {
       args: z.array(z.string()).describe('Maven arguments (e.g. ["dependency:tree", "-DoutputFile=deps.txt"])'),
       module: z.string().optional(),
+      projectPath: projectPathOption,
     },
-    async ({ args, module }) => {
+    async ({ args, module, projectPath }) => {
+      const cwd = resolveBaseDir(projectPath);
       const allArgs = module ? ['-pl', module, '-am', ...args] : args;
-      const result = await runMaven(context.config, { args: allArgs });
+      const result = await runMaven(context.config, { args: allArgs, cwd });
       const parsed = parseCompilationOutput(result.stdout + result.stderr);
 
       return {

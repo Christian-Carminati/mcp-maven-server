@@ -5,6 +5,16 @@ import { SpringBootManager } from '../utils/spring-boot-manager.js';
 
 const springBootManager = new SpringBootManager();
 
+const projectPathOption = z.string().optional().describe('Path to the Maven project/module directory (defaults to current working directory)');
+
+function resolveBaseDir(projectPath?: string): string {
+  return projectPath || process.cwd();
+}
+
+function joinPaths(base: string, sub: string): string {
+  return `${base}/${sub}`;
+}
+
 export function registerSpringBootTools(server: McpServer, context: ToolContext): void {
   server.tool(
     'springBootRun',
@@ -13,9 +23,10 @@ export function registerSpringBootTools(server: McpServer, context: ToolContext)
       module: z.string().optional().describe('Module name (for multi-module projects)'),
       profile: z.string().optional().describe('Spring profile (e.g. "dev", "production")'),
       waitForStartup: z.boolean().optional().default(false).describe('If true, waits for Tomcat/Netty startup confirmation before returning'),
+      projectPath: projectPathOption,
     },
-    async ({ module, profile, waitForStartup }) => {
-      const baseDir = context.projectInfo?.moduleDir ?? process.cwd();
+    async ({ module, profile, waitForStartup, projectPath }) => {
+      const baseDir = resolveBaseDir(projectPath);
       const modulePath = module && context.projectInfo
         ? joinPaths(context.projectInfo.projectRoot, module)
         : baseDir;
@@ -39,10 +50,11 @@ export function registerSpringBootTools(server: McpServer, context: ToolContext)
   server.tool(
     'springBootStop',
     'Stop the Spring Boot application gracefully (actuator shutdown first, SIGTERM fallback)',
-    { module: z.string().optional() },
-    async ({ module }) => {
+    { module: z.string().optional(), projectPath: projectPathOption },
+    async ({ module, projectPath }) => {
+      const baseDir = resolveBaseDir(projectPath);
       const moduleName = module ?? context.projectInfo?.moduleName ?? 'unknown';
-      const id = `${moduleName}:${context.projectInfo?.moduleDir ?? process.cwd()}`;
+      const id = `${moduleName}:${baseDir}`;
 
       await springBootManager.stop(id);
       return { content: [{ type: 'text', text: JSON.stringify({ stopped: true, instance: id }) }] };
@@ -52,10 +64,11 @@ export function registerSpringBootTools(server: McpServer, context: ToolContext)
   server.tool(
     'springBootStatus',
     'Get the current status of the Spring Boot application (port, PID, uptime, health)',
-    { module: z.string().optional() },
-    async ({ module }) => {
+    { module: z.string().optional(), projectPath: projectPathOption },
+    async ({ module, projectPath }) => {
+      const baseDir = resolveBaseDir(projectPath);
       const moduleName = module ?? context.projectInfo?.moduleName ?? 'unknown';
-      const id = `${moduleName}:${context.projectInfo?.moduleDir ?? process.cwd()}`;
+      const id = `${moduleName}:${baseDir}`;
       const instance = springBootManager.get(id);
 
       if (!instance) {
@@ -71,14 +84,15 @@ export function registerSpringBootTools(server: McpServer, context: ToolContext)
     {
       module: z.string().optional(),
       profile: z.string().optional(),
+      projectPath: projectPathOption,
     },
-    async ({ module, profile }) => {
+    async ({ module, profile, projectPath }) => {
+      const baseDir = resolveBaseDir(projectPath);
       const moduleName = module ?? context.projectInfo?.moduleName ?? 'unknown';
-      const baseId = `${moduleName}:${context.projectInfo?.moduleDir ?? process.cwd()}`;
+      const baseId = `${moduleName}:${baseDir}`;
 
       await springBootManager.stop(baseId);
 
-      const baseDir = context.projectInfo?.moduleDir ?? process.cwd();
       const modulePath = module && context.projectInfo
         ? joinPaths(context.projectInfo.projectRoot, module)
         : baseDir;
@@ -103,10 +117,12 @@ export function registerSpringBootTools(server: McpServer, context: ToolContext)
     {
       module: z.string().optional(),
       lines: z.number().optional().default(50).describe('Number of log lines to return'),
+      projectPath: projectPathOption,
     },
-    async ({ module, lines }) => {
+    async ({ module, lines, projectPath }) => {
+      const baseDir = resolveBaseDir(projectPath);
       const moduleName = module ?? context.projectInfo?.moduleName ?? 'unknown';
-      const id = `${moduleName}:${context.projectInfo?.moduleDir ?? process.cwd()}`;
+      const id = `${moduleName}:${baseDir}`;
       const instance = springBootManager.get(id);
 
       if (!instance) {
@@ -118,8 +134,4 @@ export function registerSpringBootTools(server: McpServer, context: ToolContext)
       };
     },
   );
-}
-
-function joinPaths(base: string, sub: string): string {
-  return `${base}/${sub}`;
 }

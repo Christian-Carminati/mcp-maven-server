@@ -5,12 +5,18 @@ import { runMaven, buildGoalArgs } from '../maven/runner.js';
 import { readAllReports, aggregateResults, parseSurefireReport } from '../maven/reports.js';
 import { join } from 'node:path';
 
+const projectPathOption = z.string().optional().describe('Path to the Maven project/module directory (defaults to current working directory)');
+
 function findTestReports(moduleDir: string): { unitDir: string; itDir: string } {
   const target = join(moduleDir, 'target');
   return {
     unitDir: join(target, 'surefire-reports'),
     itDir: join(target, 'failsafe-reports'),
   };
+}
+
+function resolveBaseDir(projectPath?: string): string {
+  return projectPath || process.cwd();
 }
 
 function collectAllTestResults(moduleDir: string): TestResults {
@@ -32,13 +38,13 @@ export function registerTestTools(server: McpServer, context: ToolContext): void
   server.tool(
     'runTests',
     'Run all tests (mvn test) and return structured results',
-    { module: moduleOption, profile: profileOption },
-    async ({ module, profile }) => {
+    { module: moduleOption, profile: profileOption, projectPath: projectPathOption },
+    async ({ module, profile, projectPath }) => {
+      const cwd = resolveBaseDir(projectPath);
       const args = buildGoalArgs(['test'], { module, profile: profile ? [profile] : undefined });
-      await runMaven(context.config, { args });
+      await runMaven(context.config, { args, cwd });
 
-      const baseDir = context.projectInfo?.moduleDir ?? process.cwd();
-      const results = collectAllTestResults(baseDir);
+      const results = collectAllTestResults(cwd);
       return { content: [{ type: 'text', text: JSON.stringify(results) }] };
     },
   );
@@ -46,14 +52,14 @@ export function registerTestTools(server: McpServer, context: ToolContext): void
   server.tool(
     'runSingleTest',
     'Run a single test class and return structured results',
-    { className: classNameOption, module: moduleOption },
-    async ({ className, module }) => {
+    { className: classNameOption, module: moduleOption, projectPath: projectPathOption },
+    async ({ className, module, projectPath }) => {
+      const cwd = resolveBaseDir(projectPath);
       const simpleName = className.includes('.') ? className.split('.').pop()! : className;
       const args = buildGoalArgs(['test'], { test: simpleName, module });
-      await runMaven(context.config, { args });
+      await runMaven(context.config, { args, cwd });
 
-      const baseDir = context.projectInfo?.moduleDir ?? process.cwd();
-      const { unitDir } = findTestReports(baseDir);
+      const { unitDir } = findTestReports(cwd);
       const reportPath = join(unitDir, `TEST-${className}.xml`);
       const result = parseSurefireReport(reportPath);
 
@@ -81,14 +87,14 @@ export function registerTestTools(server: McpServer, context: ToolContext): void
   server.tool(
     'runSingleMethod',
     'Run a single test method and return structured results',
-    { className: classNameOption, methodName: methodNameOption, module: moduleOption },
-    async ({ className, methodName, module }) => {
+    { className: classNameOption, methodName: methodNameOption, module: moduleOption, projectPath: projectPathOption },
+    async ({ className, methodName, module, projectPath }) => {
+      const cwd = resolveBaseDir(projectPath);
       const simpleName = className.includes('.') ? className.split('.').pop()! : className;
       const args = buildGoalArgs(['test'], { test: simpleName, method: methodName, module });
-      await runMaven(context.config, { args });
+      await runMaven(context.config, { args, cwd });
 
-      const baseDir = context.projectInfo?.moduleDir ?? process.cwd();
-      const { unitDir } = findTestReports(baseDir);
+      const { unitDir } = findTestReports(cwd);
       const reportPath = join(unitDir, `TEST-${className}.xml`);
       const result = parseSurefireReport(reportPath);
 
@@ -110,12 +116,12 @@ export function registerTestTools(server: McpServer, context: ToolContext): void
   server.tool(
     'getFailedTests',
     'Read test reports and return only failed/errored tests without re-running',
-    { module: moduleOption },
-    async ({ module }) => {
-      const baseDir = context.projectInfo?.moduleDir ?? process.cwd();
+    { module: moduleOption, projectPath: projectPathOption },
+    async ({ module, projectPath }) => {
+      const cwd = resolveBaseDir(projectPath);
       const moduleDir = module && context.projectInfo
         ? join(context.projectInfo.projectRoot, module)
-        : baseDir;
+        : cwd;
 
       const results = collectAllTestResults(moduleDir);
       return { content: [{ type: 'text', text: JSON.stringify(results.failedOnly) }] };
@@ -125,12 +131,12 @@ export function registerTestTools(server: McpServer, context: ToolContext): void
   server.tool(
     'getTestReports',
     'Read test reports from disk without running tests again',
-    { module: moduleOption },
-    async ({ module }) => {
-      const baseDir = context.projectInfo?.moduleDir ?? process.cwd();
+    { module: moduleOption, projectPath: projectPathOption },
+    async ({ module, projectPath }) => {
+      const cwd = resolveBaseDir(projectPath);
       const moduleDir = module && context.projectInfo
         ? join(context.projectInfo.projectRoot, module)
-        : baseDir;
+        : cwd;
 
       const results = collectAllTestResults(moduleDir);
       return { content: [{ type: 'text', text: JSON.stringify(results) }] };
