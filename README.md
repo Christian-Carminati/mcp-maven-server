@@ -91,6 +91,7 @@ For ALL Maven operations (compile, test, verify, package, clean, spring-boot)
 use ONLY the `mcp-maven` MCP tools. Available:
 compileProject, runTests, runSingleTest, runSingleMethod, getFailedTests,
 verifyProject, packageProject, cleanProject, executeMavenCommand,
+getCoverageReport,
 springBootRun, springBootStop, springBootRestart, springBootStatus, springBootLogs,
 getProjectInfo, getJavaInfo, getMavenInfo, ping.
 
@@ -125,6 +126,11 @@ Do not attempt to run mvn via Bash — it will be denied.
 | `runSingleMethod` | Run one test method | `projectPath`, `className`, `methodName` |
 | `getFailedTests` | Read failed tests without re-running | `projectPath`, `module` |
 | `getTestReports` | Read existing reports from disk | `projectPath`, `module` |
+
+### Coverage
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `getCoverageReport` | Read JaCoCo coverage report (lines, branches, methods per package) | `projectPath`, `generate` (run `jacoco:report` first) |
 
 ### Spring Boot
 | Tool | Description | Key Parameters |
