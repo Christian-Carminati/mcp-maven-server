@@ -112,6 +112,18 @@ export function registerBuildTools(server: McpServer, context: ToolContext): voi
       const result = await runMaven(context.config, { args: allArgs, cwd });
       const parsed = parseCompilationOutput(result.stdout + result.stderr);
 
+      if (!result.success && parsed.errors.length === 0) {
+        // Include raw output tail when no structured errors were parsed
+        const rawTail = result.stdout.split('\n').slice(-20).join('\n');
+        parsed.errors.push({
+          file: '',
+          line: 0,
+          column: 0,
+          severity: 'ERROR',
+          message: `Maven command failed (exit ${result.exitCode}). Last output lines:\n${rawTail}`,
+        });
+      }
+
       return {
         content: [{ type: 'text', text: JSON.stringify({
           success: result.exitCode === 0,

@@ -1,4 +1,5 @@
 import { execa } from 'execa';
+import { existsSync } from 'node:fs';
 import { type MavenResult, type McpMavenConfig } from '../core/types.js';
 
 const DEFAULT_ARGS: string[] = [
@@ -8,6 +9,59 @@ const DEFAULT_ARGS: string[] = [
   '--batch-mode',
   '-Dmaven.test.failure.ignore=true',
 ];
+
+const MAVEN_FALLBACK_PATHS = [
+  'C:\\Program Files\\JetBrains\\IntelliJ IDEA 2025.3.6\\plugins\\maven\\lib\\maven3\\bin\\mvn.cmd',
+  'C:\\Program Files\\JetBrains\\IntelliJ IDEA 2024.3.4\\plugins\\maven\\lib\\maven3\\bin\\mvn.cmd',
+  'C:\\Program Files\\JetBrains\\IntelliJ IDEA 2024.2.5\\plugins\\maven\\lib\\maven3\\bin\\mvn.cmd',
+  'C:\\Program Files\\JetBrains\\IntelliJ IDEA Community Edition 2025.3\\plugins\\maven\\lib\\maven3\\bin\\mvn.cmd',
+  'C:\\Program Files\\Maven\\apache-maven-3.9.9\\bin\\mvn.cmd',
+  'C:\\Program Files\\Maven\\apache-maven-3.8.8\\bin\\mvn.cmd',
+  'C:\\ProgramData\\chocolatey\\lib\\maven\\apache-maven\\bin\\mvn.cmd',
+  'C:\\tools\\apache-maven\\bin\\mvn.cmd',
+];
+
+let cachedMavenCommand: string | null = null;
+
+export async function detectMaven(): Promise<string> {
+  if (cachedMavenCommand) return cachedMavenCommand;
+
+  // 1. Env override
+  const envOverride = process.env.MCP_MAVEN_COMMAND;
+  if (envOverride) {
+    cachedMavenCommand = envOverride;
+    return cachedMavenCommand;
+  }
+
+  // 2. Try 'mvn' from PATH
+  try {
+    const test = await execa('mvn', ['--version'], {
+      timeout: 10_000,
+      reject: false,
+      windowsHide: true,
+      all: true,
+    });
+    if (test.exitCode === 0) {
+      cachedMavenCommand = 'mvn';
+      return cachedMavenCommand;
+    }
+  } catch { /* not in PATH */ }
+
+  // 3. Known Windows paths (IntelliJ-bundled, standalone installs)
+  for (const p of MAVEN_FALLBACK_PATHS) {
+    if (existsSync(p)) {
+      cachedMavenCommand = p;
+      return cachedMavenCommand;
+    }
+  }
+
+  cachedMavenCommand = 'mvn';
+  return cachedMavenCommand;
+}
+
+export function getMavenCommandSync(): string {
+  return cachedMavenCommand || 'mvn';
+}
 
 export interface RunOptions {
   args: string[];
@@ -20,11 +74,12 @@ export async function runMaven(
   config: McpMavenConfig,
   options: RunOptions,
 ): Promise<MavenResult & { stdout: string; stderr: string }> {
+  const mvnCommand = await detectMaven();
   const allArgs = [...DEFAULT_ARGS, ...options.args];
   const startTime = Date.now();
 
   try {
-    const result = await execa('mvn', allArgs, {
+    const result = await execa(mvnCommand, allArgs, {
       cwd: options.cwd || process.cwd(),
       timeout: options.timeout || config.timeoutMs,
       reject: false,
