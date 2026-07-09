@@ -1,5 +1,9 @@
 import { execa } from 'execa';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { type MavenResult, type McpMavenConfig } from '../core/types.js';
+import { parsePom } from '../project/pom-parser.js';
+import { resolveJavaVersion, findJavaHomeForVersion } from '../project/java-env.js';
 
 const DEFAULT_ARGS: string[] = [
   '-Duser.language=en',
@@ -60,18 +64,21 @@ export async function runMaven(
   const allArgs = [...DEFAULT_ARGS, ...options.args];
   const startTime = Date.now();
 
+  const projectDir = options.cwd || process.cwd();
+
   try {
     const execaOpts: Record<string, any> = {
-      cwd: options.cwd || process.cwd(),
+      cwd: projectDir,
       timeout: options.timeout || config.timeoutMs,
       reject: false,
       all: true,
       windowsHide: true,
     };
 
-    // Pass project-specific JAVA_HOME if provided
-    if (options.javaHome) {
-      execaOpts.env = { ...process.env, JAVA_HOME: options.javaHome };
+    // Auto-detect project JDK version → set JAVA_HOME
+    const effectiveJavaHome = options.javaHome || detectProjectJavaHome(projectDir);
+    if (effectiveJavaHome) {
+      execaOpts.env = { ...process.env, JAVA_HOME: effectiveJavaHome };
     }
 
     const result = await execa(mvnCommand, allArgs, execaOpts);
@@ -105,6 +112,21 @@ function truncateOutput(output: string, maxLines: number): string {
   const lines = output.split('\n');
   if (lines.length <= maxLines) return output;
   return lines.slice(lines.length - maxLines).join('\n');
+}
+
+function detectProjectJavaHome(projectDir: string): string | null {
+  try {
+    const pomPath = join(projectDir, 'pom.xml');
+    if (!existsSync(pomPath)) return null;
+
+    const pom = parsePom(pomPath);
+    const version = resolveJavaVersion(pom);
+    if (!version) return null;
+
+    return findJavaHomeForVersion(version);
+  } catch {
+    return null;
+  }
 }
 
 export function buildGoalArgs(goals: string[], opts?: {
