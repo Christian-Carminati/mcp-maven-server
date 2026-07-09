@@ -1,0 +1,11 @@
+[ERROR] COMPILATION ERROR :
+[ERROR] /project/src/main/java/com/example/UserService.java:42: error: cannot find symbol
+import com.example.UserDto;
+                ^
+  symbol:   class UserDto
+  location: package com.example
+[ERROR] /project/src/main/java/com/example/UserController.java:15: warning: [deprecation] getOldMethod() in BaseController has been deprecated
+  getOldMethod();
+  ^
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.8.1:compile (default-compile) on project my-app: Compilation failure
+[ERROR] 1 error, 1 warning

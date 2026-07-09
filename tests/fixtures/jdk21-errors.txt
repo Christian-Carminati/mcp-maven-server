@@ -1,0 +1,8 @@
+[ERROR] /project/src/main/java/com/example/RecordMatcher.java:15: error: pattern type SomeRecord is not a record in switch
+    return switch (obj) {
+  case SomeRecord(var x) -> x;
+       ^
+  pattern type SomeRecord does not have a canonical constructor
+[ERROR] /project/src/main/java/com/example/UserService.java:42: error: cannot find symbol
+  symbol:   class UserDto
+  location: class com.example.UserService

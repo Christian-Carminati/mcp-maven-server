@@ -1,0 +1,7 @@
+[ERROR] /project/src/main/java/com/example/ShapeMatcher.java:23: error: this is the selected type of the switch expression
+    switch (shape) {
+    ^
+  case Circle c when c.radius() > 0 -> c;
+                                    ^
+  does not provide a public default constructor
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-compiler-plugin:3.11.0:compile (default-compile) on project my-app: Compilation failure
