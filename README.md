@@ -93,7 +93,8 @@ compileProject, runTests, runSingleTest, runSingleMethod, getFailedTests,
 verifyProject, packageProject, cleanProject, executeMavenCommand,
 getCoverageReport,
 springBootRun, springBootStop, springBootRestart, springBootStatus, springBootLogs,
-getProjectInfo, getJavaInfo, getMavenInfo, ping.
+getProjectInfo, getJavaInfo, getMavenInfo, ping,
+getCacheInfo, clearCache.
 
 The Bash tool is blocked for mvn/java commands by permission rules.
 Do not attempt to run mvn via Bash — it will be denied.
@@ -121,11 +122,23 @@ Do not attempt to run mvn via Bash — it will be denied.
 ### Test
 | Tool | Description | Key Parameters |
 |------|-------------|----------------|
-| `runTests` | Execute all tests | `projectPath`, `module`, `profile` |
+| `runTests` | Execute tests with **build cache** (second call is instant) | `projectPath`, `module`, `profile`, `force`, `parallel` |
 | `runSingleTest` | Run one test class | `projectPath`, `className` |
 | `runSingleMethod` | Run one test method | `projectPath`, `className`, `methodName` |
 | `getFailedTests` | Read failed tests without re-running | `projectPath`, `module` |
 | `getTestReports` | Read existing reports from disk | `projectPath`, `module` |
+
+> **`runTests` caching:** By default, checks if any source/test files changed since the last run.
+> If nothing changed, returns cached results *instantly* — no Maven execution.
+> Use `force: true` to bypass cache and re-run all tests.
+> Use `parallel: true` (default) for parallel execution (`-T 2 -DforkCount=2`).
+> Response includes `_cached: true` flag when served from cache.
+
+### Cache Management
+| Tool | Description |
+|------|-------------|
+| `getCacheInfo` | Show which modules are cached and how old |
+| `clearCache` | Invalidate cache for a module (or all) |
 
 ### Coverage
 | Tool | Description | Key Parameters |
@@ -167,6 +180,7 @@ All settings are optional and configured via environment variables (set in the M
 | `MCP_MAVEN_DEFAULT_PROFILE` | — | Default Maven profile |
 | `MCP_JAVA_HOME` | — | Override JDK path |
 | **`MCP_MAVEN_COMMAND`** | `mvn` | **Full path to `mvn.cmd`/`mvn` binary** (e.g. IntelliJ-bundled Maven) |
+| `MCP_MAVEN_CACHE_ENABLED` | `true` | Enable/disable build cache |
 
 ## Project Structure
 
