@@ -1,5 +1,4 @@
 import { execa } from 'execa';
-import { existsSync } from 'node:fs';
 import { type MavenResult, type McpMavenConfig } from '../core/types.js';
 
 const DEFAULT_ARGS: string[] = [
@@ -10,30 +9,19 @@ const DEFAULT_ARGS: string[] = [
   '-Dmaven.test.failure.ignore=true',
 ];
 
-const MAVEN_FALLBACK_PATHS = [
-  'C:\\Program Files\\JetBrains\\IntelliJ IDEA 2025.3.6\\plugins\\maven\\lib\\maven3\\bin\\mvn.cmd',
-  'C:\\Program Files\\JetBrains\\IntelliJ IDEA 2024.3.4\\plugins\\maven\\lib\\maven3\\bin\\mvn.cmd',
-  'C:\\Program Files\\JetBrains\\IntelliJ IDEA 2024.2.5\\plugins\\maven\\lib\\maven3\\bin\\mvn.cmd',
-  'C:\\Program Files\\JetBrains\\IntelliJ IDEA Community Edition 2025.3\\plugins\\maven\\lib\\maven3\\bin\\mvn.cmd',
-  'C:\\Program Files\\Maven\\apache-maven-3.9.9\\bin\\mvn.cmd',
-  'C:\\Program Files\\Maven\\apache-maven-3.8.8\\bin\\mvn.cmd',
-  'C:\\ProgramData\\chocolatey\\lib\\maven\\apache-maven\\bin\\mvn.cmd',
-  'C:\\tools\\apache-maven\\bin\\mvn.cmd',
-];
-
 let cachedMavenCommand: string | null = null;
 
 export async function detectMaven(): Promise<string> {
   if (cachedMavenCommand) return cachedMavenCommand;
 
-  // 1. Env override
+  // 1. Env var override (MCP_MAVEN_COMMAND in MCP server env)
   const envOverride = process.env.MCP_MAVEN_COMMAND;
   if (envOverride) {
     cachedMavenCommand = envOverride;
     return cachedMavenCommand;
   }
 
-  // 2. Try 'mvn' from PATH
+  // 2. Try 'mvn' from PATH (works if Maven is in Windows/macOS/Linux PATH)
   try {
     const test = await execa('mvn', ['--version'], {
       timeout: 10_000,
@@ -47,14 +35,7 @@ export async function detectMaven(): Promise<string> {
     }
   } catch { /* not in PATH */ }
 
-  // 3. Known Windows paths (IntelliJ-bundled, standalone installs)
-  for (const p of MAVEN_FALLBACK_PATHS) {
-    if (existsSync(p)) {
-      cachedMavenCommand = p;
-      return cachedMavenCommand;
-    }
-  }
-
+  // 3. Fallback: use 'mvn' anyway — will fail with a clear error at runtime
   cachedMavenCommand = 'mvn';
   return cachedMavenCommand;
 }
