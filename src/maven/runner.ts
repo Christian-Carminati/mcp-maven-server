@@ -49,6 +49,7 @@ export interface RunOptions {
   cwd?: string;
   timeout?: number;
   maxLines?: number;
+  javaHome?: string;      // Override JAVA_HOME for this Maven invocation
 }
 
 export async function runMaven(
@@ -60,13 +61,20 @@ export async function runMaven(
   const startTime = Date.now();
 
   try {
-    const result = await execa(mvnCommand, allArgs, {
+    const execaOpts: Record<string, any> = {
       cwd: options.cwd || process.cwd(),
       timeout: options.timeout || config.timeoutMs,
       reject: false,
       all: true,
       windowsHide: true,
-    });
+    };
+
+    // Pass project-specific JAVA_HOME if provided
+    if (options.javaHome) {
+      execaOpts.env = { ...process.env, JAVA_HOME: options.javaHome };
+    }
+
+    const result = await execa(mvnCommand, allArgs, execaOpts);
 
     const output = result.all || '';
     const elapsed = Date.now() - startTime;

@@ -78,3 +78,55 @@ function extractVersion(output: string): string {
   const match = output.match(/(\d+\.\d+(?:\.\d+)?)/);
   return match?.[1] ?? '11';
 }
+
+// Known JDK installation paths on Windows (scanned in order)
+const KNOWN_JDK_ROOTS = [
+  'C:\\Program Files\\Eclipse Adoptium',
+  'C:\\Program Files\\Java',
+  'C:\\Program Files\\Amazon Corretto',
+  'C:\\Program Files\\Microsoft',
+  'C:\\Users\\christian.carminati\\AppData\\Local\\Programs\\Eclipse Adoptium',
+];
+
+/**
+ * Find a JDK installation matching the required version.
+ * Scans well-known installation directories on Windows.
+ * Returns the JAVA_HOME path or null if not found.
+ */
+export function findJavaHomeForVersion(requiredVersion: string): string | null {
+  // Check MCP_JAVA_HOME env override first
+  if (process.env.MCP_JAVA_HOME) {
+    const candidate = process.env.MCP_JAVA_HOME;
+    try {
+      const out = execSync(`"${candidate}\\bin\\java" -version 2>&1`, { encoding: 'utf-8' });
+      if (out.includes(`version "${requiredVersion}`) || out.includes(`openjdk version "${requiredVersion}`)) {
+        return candidate;
+      }
+    } catch { /* not a valid JDK path */ }
+  }
+
+  // Scan known JDK roots
+  const requiredMajor = parseInt(requiredVersion, 10);
+  for (const root of KNOWN_JDK_ROOTS) {
+    try {
+      const dirs = execSync(`dir "${root}" /b /ad 2>nul`, { encoding: 'utf-8', shell: 'cmd.exe' });
+      for (const dir of dirs.split('\r\n').filter(Boolean)) {
+        const jdkPath = `${root}\\${dir.trim()}`;
+        const majorMatch = dir.match(/jdk-?(\d+)/i);
+        if (majorMatch && parseInt(majorMatch[1], 10) === requiredMajor) {
+          try {
+            const out = execSync(`"${jdkPath}\\bin\\java" -version 2>&1`, { encoding: 'utf-8' });
+            if (out.includes(`version "${requiredVersion}`) || out.includes(`openjdk version "${requiredVersion}`)) {
+              return jdkPath;
+            }
+            // Fallback: match by major version
+            return jdkPath;
+          } catch { /* skip */ }
+        }
+      }
+    } catch { /* directory not found */ }
+  }
+
+  return process.env.JAVA_HOME || null;
+}
+
