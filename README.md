@@ -154,6 +154,13 @@ Do not attempt to run mvn via Bash — it will be denied.
 | `springBootStatus` | Check status, port, PID, health endpoint | `projectPath`, `module` |
 | `springBootLogs` | View recent log lines | `projectPath`, `lines` |
 
+### Code Quality (SonarQube)
+| Tool | Description | Key Parameters |
+|------|-------------|----------------|
+| `runSonarQubeAnalysis` | Run `mvn sonar:sonar` + API results: quality gate, measures (bugs, vulns, code smells, coverage), issues & hotspots | `projectPath`, `module`, `projectKey`, `qualityGateWait`, `detail` |
+
+> **Zero LLM token waste**: the analysis runs locally via Maven. The MCP server only fetches structured JSON results from the SonarQube API.
+
 ### Project Info
 | Tool | Description | Key Parameters |
 |------|-------------|----------------|
@@ -181,6 +188,9 @@ All settings are optional and configured via environment variables (set in the M
 | `MCP_JAVA_HOME` | — | Override JDK path |
 | **`MCP_MAVEN_COMMAND`** | `mvn` | **Full path to `mvn.cmd`/`mvn` binary** (e.g. IntelliJ-bundled Maven) |
 | `MCP_MAVEN_CACHE_ENABLED` | `true` | Enable/disable build cache |
+| `MCP_SONAR_HOST_URL` | `http://172.16.63.242:9000` | SonarQube server URL |
+| `MCP_SONAR_TOKEN` | — | SonarQube authentication token (user token, not project-scoped) |
+| `MCP_SONAR_PROJECT_KEY` | — | Default SonarQube project key (e.g. `be-bancomatpay-develop`) |
 
 ## Project Structure
 

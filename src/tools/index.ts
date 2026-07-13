@@ -6,6 +6,7 @@ import { registerBuildTools } from './build.js';
 import { registerProjectTools } from './project.js';
 import { registerSpringBootTools } from './spring-boot.js';
 import { registerCoverageTools } from './coverage.js';
+import { registerSonarQubeTools } from './sonarqube.js';
 
 export function registerAllTools(server: McpServer, context: ToolContext): void {
   registerCompileTools(server, context);
@@ -14,4 +15,5 @@ export function registerAllTools(server: McpServer, context: ToolContext): void 
   registerProjectTools(server, context);
   registerSpringBootTools(server, context);
   registerCoverageTools(server, context);
+  registerSonarQubeTools(server, context);
 }

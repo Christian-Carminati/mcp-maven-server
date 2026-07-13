@@ -120,6 +120,9 @@ export interface McpMavenConfig {
   springBootStartupTimeout: number;
   cacheEnabled: boolean;
   defaultProfile: string;
+  sonarHostUrl: string;
+  sonarToken: string;
+  sonarProjectKey: string;
 }
 
 // --- MCP Tool Context ---
