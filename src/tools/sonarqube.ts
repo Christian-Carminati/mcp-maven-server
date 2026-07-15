@@ -1,9 +1,6 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { ToolContext } from '../core/types.js';
-import { runMaven, buildGoalArgs } from '../maven/runner.js';
-import { readdirSync, statSync, existsSync } from 'node:fs';
-import { join, relative } from 'node:path';
 
 // ============================================================
 // SonarQube REST API client (uses Node 18+ global fetch)
@@ -27,40 +24,10 @@ async function sonarApiGet(
 
   if (!response.ok) {
     const body = await response.text().catch(() => '(no body)');
-    throw new Error(`SonarQube API error: ${response.status} ${response.statusText} — ${body.slice(0, 200)}`);
+    throw new Error(`SonarQube API error: ${response.status} ${response.statusText} - ${body.slice(0, 200)}`);
   }
 
   return response.json();
-}
-
-async function waitForAnalysis(hostUrl: string, token: string, projectKey: string, timeoutMs = 120_000): Promise<void> {
-  const start = Date.now();
-
-  while (Date.now() - start < timeoutMs) {
-    let data: any;
-    try {
-      data = await sonarApiGet(hostUrl, token, `/ce/activity?component=${encodeURIComponent(projectKey)}&limit=1`);
-    } catch (e: any) {
-      // If CE endpoint is forbidden (403), skip waiting — results may be ready already
-      if (e.message.includes('403') || e.message.includes('Forbidden') || e.message.includes('Insufficient privileges')) {
-        return;
-      }
-      throw e;
-    }
-
-    const tasks: any[] = data.tasks ?? [];
-
-    if (tasks.length === 0) return; // nothing to wait for
-
-    const status = tasks[0].status;
-    if (status === 'SUCCESS' || status === 'CANCELED' || status === 'FAILED') {
-      return;
-    }
-
-    await new Promise(r => setTimeout(r, 2000));
-  }
-
-  throw new Error(`SonarQube analysis did not complete within ${timeoutMs / 1000}s`);
 }
 
 // ============================================================
@@ -139,6 +106,19 @@ async function fetchQualityGate(hostUrl: string, token: string, projectKey: stri
       errorThreshold: c.errorThreshold,
     })),
   };
+}
+
+// ============================================================
+// Auth check
+// ============================================================
+
+async function checkSonarAuth(hostUrl: string, token: string): Promise<boolean> {
+  try {
+    await sonarApiGet(hostUrl, token, '/authentication/validate');
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // ============================================================
@@ -225,85 +205,19 @@ async function fetchHotspots(hostUrl: string, token: string, projectKey: string)
 }
 
 // ============================================================
-// Auth check
-// ============================================================
-
-async function checkSonarAuth(hostUrl: string, token: string): Promise<boolean> {
-  try {
-    await sonarApiGet(hostUrl, token, '/authentication/validate');
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-// ============================================================
-// Online freshness check — compare local files vs SonarQube analysis date
-// ============================================================
-
-/**
- * Get the latest analysis date from SonarQube API.
- * Returns null if no analysis exists yet.
- */
-async function fetchLastAnalysisDate(hostUrl: string, token: string, projectKey: string): Promise<string | null> {
-  try {
-    const data = await sonarApiGet(hostUrl, token, `/project_analyses/search?project=${encodeURIComponent(projectKey)}&ps=1`);
-    const analyses: any[] = data.analyses ?? [];
-    return analyses.length > 0 ? analyses[0].date : null;
-  } catch {
-    return null; // if we can't get the date, fall back to running analysis
-  }
-}
-
-/**
- * Get the most recent modification time (ms) across all source + test files.
- * Returns 0 if no files found.
- */
-function getLatestFileMtime(moduleDir: string): number {
-  let latest = 0;
-  const dirs = [
-    join(moduleDir, 'src', 'main', 'java'),
-    join(moduleDir, 'src', 'main', 'resources'),
-    join(moduleDir, 'src', 'test', 'java'),
-  ];
-  for (const dir of dirs) {
-    if (!existsSync(dir)) continue;
-    try {
-      const walk = (d: string) => {
-        for (const entry of readdirSync(d, { withFileTypes: true })) {
-          const full = join(d, entry.name);
-          if (entry.isDirectory()) walk(full);
-          else if (entry.name.endsWith('.java') || entry.name.endsWith('.yml') || entry.name.endsWith('.yaml') || entry.name.endsWith('.xml') || entry.name.endsWith('.properties')) {
-            const mtime = statSync(full).mtimeMs;
-            if (mtime > latest) latest = mtime;
-          }
-        }
-      };
-      walk(dir);
-    } catch { /* skip */ }
-  }
-  return latest;
-}
-
-// ============================================================
 // Tool registration
 // ============================================================
 
 export function registerSonarQubeTools(server: McpServer, context: ToolContext): void {
   server.tool(
     'runSonarQubeAnalysis',
-    'Run SonarQube analysis and return structured results: quality gate, measures (bugs, vulnerabilities, code smells, coverage), new issues, and security hotspots. Skips Maven if no local files changed since last SonarQube analysis — fetches results directly from the API. Use fresh:true to force a full re-analysis.',
+    'Fetch SonarQube analysis results from the server API: quality gate, measures (bugs, vulnerabilities, code smells, coverage), issues, and security hotspots. Read-only - does NOT run Maven or trigger a new analysis. Results reflect the latest analysis already on the server.',
     {
       projectPath: z.string().optional().describe('Path to the Maven project/module directory'),
-      module: z.string().optional().describe('Maven module name'),
-      profile: z.string().optional().describe('Maven profile to activate'),
       projectKey: z.string().optional().describe('SonarQube project key (e.g. "be-bancomatpay-develop"). Falls back to MCP_SONAR_PROJECT_KEY env var.'),
-      qualityGateWait: z.boolean().optional().default(true).describe('Wait for SonarQube Compute Engine to complete and fetch fresh quality gate.'),
-      runTests: z.boolean().optional().default(true).describe('Run all tests (verify phase, includes integration tests) with JaCoCo first to generate coverage data before analysis.'),
-      fresh: z.boolean().optional().default(false).describe('Bypass cache and force re-run analysis even if no files changed.'),
       detail: z.enum(['compact', 'normal', 'full']).optional().default('normal').describe('Result detail level: compact (summary only), normal (summary + quality gate + top issues), full (everything including all issues/hotspots).'),
     },
-    async ({ projectPath, module, profile, projectKey, qualityGateWait, runTests, fresh, detail }) => {
+    async ({ projectPath, projectKey, detail }) => {
       const cwd = projectPath || process.cwd();
       const hostUrl = context.config.sonarHostUrl;
       const token = context.config.sonarToken;
@@ -338,63 +252,7 @@ export function registerSonarQubeTools(server: McpServer, context: ToolContext):
         };
       }
 
-      // Check if SonarQube already has a recent analysis (skip Maven if nothing changed)
-      let skipMaven = false;
-      if (!fresh && runTests) {
-        const lastAnalysisDate = await fetchLastAnalysisDate(hostUrl, token, key);
-        if (lastAnalysisDate) {
-          const analysisTime = new Date(lastAnalysisDate).getTime();
-          const latestLocalMtime = getLatestFileMtime(cwd);
-          if (latestLocalMtime > 0 && analysisTime > latestLocalMtime) {
-            skipMaven = true;
-          }
-        }
-      }
-
-      let waitWarning: string | undefined;
-
-      if (!skipMaven) {
-        // Build Maven goals: tests (unit + integration) + coverage + SonarQube analysis
-        const goals = runTests
-          ? ['verify', 'jacoco:report', 'sonar:sonar']
-          : ['sonar:sonar'];
-
-        const sonarArgs = [
-          `-Dsonar.host.url=${hostUrl}`,
-          `-Dsonar.token=${token}`,
-          `-Dsonar.projectKey=${key}`,
-          `-Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml`,
-        ];
-        const args = buildGoalArgs(goals, { module, profile: profile ? [profile] : undefined });
-        const allArgs = [...args, ...sonarArgs];
-
-        const result = await runMaven(context.config, { args: allArgs, cwd });
-
-        if (!result.success && result.exitCode !== 0) {
-          const hasError = result.stdout.toLowerCase().includes('error') || result.stderr.toLowerCase().includes('error');
-          if (hasError && result.stdout.includes('[ERROR]')) {
-            return {
-              content: [{ type: 'text', text: JSON.stringify({
-                success: false,
-                error: 'SonarQube analysis execution failed',
-                exitCode: result.exitCode,
-                lastLogLines: result.stdout.slice(-500),
-              }) }],
-            };
-          }
-        }
-
-        // Wait for analysis completion
-        if (qualityGateWait) {
-          try {
-            await waitForAnalysis(hostUrl, token, key);
-          } catch (e: any) {
-            waitWarning = e.message;
-          }
-        }
-      }
-
-      // Fetch results from SonarQube API (fresh from online)
+      // Fetch results directly from SonarQube API (read-only, no Maven involved)
       let qualityGate: QualityGateResult;
       let measures: SonarMeasures;
       let issues: { total: number; issues: SonarIssue[] };
@@ -409,7 +267,6 @@ export function registerSonarQubeTools(server: McpServer, context: ToolContext):
           content: [{ type: 'text', text: JSON.stringify({
             success: false,
             error: `Failed to fetch SonarQube results: ${e.message}`,
-            waitWarning,
           }) }],
         };
       }
@@ -425,14 +282,9 @@ export function registerSonarQubeTools(server: McpServer, context: ToolContext):
           conditions: qualityGate.conditions,
         },
         measures,
+        _readOnly: true,
+        _message: 'Read-only fetch from SonarQube API. No Maven analysis was run.',
       };
-      if (skipMaven) {
-        response._fromApi = true;
-        response._message = 'Results fetched from SonarQube API — local files unchanged since last analysis. Use fresh:true to force re-analysis.';
-      }
-      if (waitWarning) {
-        response.warning = waitWarning;
-      }
 
       if (detail === 'compact') {
         // Summary only
