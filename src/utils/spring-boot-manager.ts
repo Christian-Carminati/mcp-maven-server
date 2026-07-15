@@ -3,6 +3,8 @@ import { request } from 'node:http';
 import { join } from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
 import { type SpringBootInstance, type SpringBootStatus } from '../core/types.js';
+import { parsePom } from '../project/pom-parser.js';
+import { resolveJavaVersion, findJavaHomeForVersion } from '../project/java-env.js';
 
 const STARTUP_PATTERNS = [
   /Started\s+\S+\s+in\s+\d+\.\d+\s+seconds/,
@@ -33,11 +35,19 @@ export class SpringBootManager {
     const mvnArgs = ['spring-boot:run'];
     if (opts.profile) mvnArgs.push(`-Dspring.profiles.active=${opts.profile}`);
 
+    // Auto-detect project JDK version → set JAVA_HOME
+    const execaEnv: NodeJS.ProcessEnv = { ...process.env };
+    const effectiveJavaHome = detectProjectJavaHome(modulePath);
+    if (effectiveJavaHome) {
+      execaEnv.JAVA_HOME = effectiveJavaHome;
+    }
+
     const proc = execa('mvn', mvnArgs, {
       cwd: modulePath,
       windowsHide: true,
       all: true,
       buffer: false,
+      env: execaEnv,
     });
 
     this.processes.set(id, proc);
@@ -150,6 +160,23 @@ function detectPort(modulePath: string): number {
   }
 
   return 8080;
+}
+
+/**
+ * Detect the correct JAVA_HOME for the project by reading its pom.xml
+ * and finding a matching JDK installation. Returns null if auto-detection fails.
+ */
+function detectProjectJavaHome(projectDir: string): string | null {
+  try {
+    const pomPath = join(projectDir, 'pom.xml');
+    if (!existsSync(pomPath)) return null;
+    const pom = parsePom(pomPath);
+    const version = resolveJavaVersion(pom);
+    if (!version) return null;
+    return findJavaHomeForVersion(version);
+  } catch {
+    return null;
+  }
 }
 
 function gracefulShutdown(port: number): Promise<void> {
